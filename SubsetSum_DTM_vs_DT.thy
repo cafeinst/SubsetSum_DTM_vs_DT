@@ -3,43 +3,43 @@ theory SubsetSum_DTM_vs_DT
           "SubsetSum_DecisionTree"
 begin
 
-(* Define the TM→decision-tree bridge INSIDE the base TM locale. *)
+(* Define the TM\<rightarrow>decision-tree bridge INSIDE the base TM locale. *)
 lemma exp_beats_poly_ceiling_strict_plain:
   fixes c :: real and d :: nat
   assumes cpos: "c > 0"
-  shows "∃N::nat. ∀n≥N.
+  shows "\<exists>N::nat. \<forall>n\<ge>N.
            of_int (ceiling (c * (real n) ^ d)) < 2 * sqrt ((2::real) ^ n)"
 proof -
-  (* Eventually: c * n^d ≤ (√2)^n *)
-  have ev: "eventually (λn. c * (real n) ^ d ≤ (sqrt 2) ^ n) at_top"
+  (* Eventually: c * n^d \<le> (\<surd>2)^n *)
+  have ev: "eventually (\<lambda>n. c * (real n) ^ d \<le> (sqrt 2) ^ n) at_top"
     by real_asymp
   then obtain N1 :: nat where N1:
-    "∀n≥N1. c * (real n) ^ d ≤ (sqrt 2) ^ n"
+    "\<forall>n\<ge>N1. c * (real n) ^ d \<le> (sqrt 2) ^ n"
     by (auto simp: eventually_at_top_linorder)
 
   define N where "N = max N1 1"
 
-  have ceil_le: "of_int (ceiling y) ≤ y + 1" for y :: real
+  have ceil_le: "of_int (ceiling y) \<le> y + 1" for y :: real
     by linarith
 
-  (* Strict step: for n≥1, (√2)^n + 1 < 2(√2)^n *)
+  (* Strict step: for n\<ge>1, (\<surd>2)^n + 1 < 2(\<surd>2)^n *)
   have step_strict:
-    "n ≥ 1 ⟹ (sqrt 2) ^ n + 1 < 2 * (sqrt 2) ^ n"
+    "n \<ge> 1 \<Longrightarrow> (sqrt 2) ^ n + 1 < 2 * (sqrt 2) ^ n"
   proof -
-    assume n1: "n ≥ 1"
+    assume n1: "n \<ge> 1"
     obtain k where nSuc: "n = Suc k" using n1 by (cases n) auto
-    (* (√2)^k ≥ 1 *)
-    have pow_ge1: "1 ≤ (sqrt (2::real)) ^ k"
+    (* (\<surd>2)^k \<ge> 1 *)
+    have pow_ge1: "1 \<le> (sqrt (2::real)) ^ k"
     proof (induction k)
       case 0 show ?case by simp
     next
       case (Suc k)
-      have "1 * sqrt 2 ≤ (sqrt 2) ^ k * sqrt 2"
+      have "1 * sqrt 2 \<le> (sqrt 2) ^ k * sqrt 2"
         using Suc.IH by (simp add: mult_right_mono)
       thus ?case by (smt (verit, del_insts) one_le_power real_sqrt_ge_1_iff)
     qed
-    (* hence √2 ≤ (√2)^(Suc k), and since 1 < √2, we get 1 < (√2)^n *)
-    have "sqrt 2 ≤ (sqrt 2) ^ Suc k"
+    (* hence \<surd>2 \<le> (\<surd>2)^(Suc k), and since 1 < \<surd>2, we get 1 < (\<surd>2)^n *)
+    have "sqrt 2 \<le> (sqrt 2) ^ Suc k"
       using pow_ge1 by (simp add: mult_right_mono)
     hence "1 < (sqrt 2) ^ n"
       using nSuc by (smt (verit) real_sqrt_gt_1_iff)
@@ -48,10 +48,10 @@ proof -
 
   show ?thesis
   proof (rule exI[of _ N], intro allI impI)
-    fix n assume nN: "n ≥ N"
-    hence nN1: "n ≥ N1" and n_ge1: "n ≥ 1" by (auto simp: N_def)
-    from N1 nN1 have bound: "c * (real n) ^ d ≤ (sqrt 2) ^ n" by simp
-    have up: "of_int (ceiling (c * (real n) ^ d)) ≤ (sqrt 2) ^ n + 1"
+    fix n assume nN: "n \<ge> N"
+    hence nN1: "n \<ge> N1" and n_ge1: "n \<ge> 1" by (auto simp: N_def)
+    from N1 nN1 have bound: "c * (real n) ^ d \<le> (sqrt 2) ^ n" by simp
+    have up: "of_int (ceiling (c * (real n) ^ d)) \<le> (sqrt 2) ^ n + 1"
       using ceil_le bound by linarith
     have strict: "(sqrt 2) ^ n + 1 < 2 * (sqrt 2) ^ n"
       using step_strict n_ge1 by auto
@@ -69,7 +69,7 @@ begin
 (* Make DTM_Run available as Base.* inside this context. *)
 sublocale Base: DTM_Run steps conf head0 accepts .
 
-fun tm_to_dtr :: "nat ⇒ 'C ⇒ (nat,nat) dtr" where
+fun tm_to_dtr :: "nat \<Rightarrow> 'C \<Rightarrow> (nat,nat) dtr" where
   "tm_to_dtr 0 c = Leaf (final_acc c)"
 | "tm_to_dtr (Suc t) c =
      AskL (nat (head0 c))
@@ -99,11 +99,11 @@ next
     have "run ((!) x) ((!) x) (tm_to_dtr (Suc t) (conf M x t0))
           = run ((!) x) ((!) x) (tm_to_dtr t (stepf (conf M x t0) True))"
       by (simp add: True)
-    also have "… = run ((!) x) ((!) x) (tm_to_dtr t (conf M x (Suc t0)))"
+    also have "\<dots> = run ((!) x) ((!) x) (tm_to_dtr t (conf M x (Suc t0)))"
       using True step0 by simp
-    also have "… = final_acc (conf M x (Suc t0 + t))"
+    also have "\<dots> = final_acc (conf M x (Suc t0 + t))"
       by (rule Suc.IH)
-    also have "… = final_acc (conf M x (t0 + Suc t))"
+    also have "\<dots> = final_acc (conf M x (t0 + Suc t))"
       by simp
     finally show ?thesis .
   next
@@ -111,11 +111,11 @@ next
     have "run ((!) x) ((!) x) (tm_to_dtr (Suc t) (conf M x t0))
           = run ((!) x) ((!) x) (tm_to_dtr t (stepf (conf M x t0) False))"
       by (simp add: False)
-    also have "… = run ((!) x) ((!) x) (tm_to_dtr t (conf M x (Suc t0)))"
+    also have "\<dots> = run ((!) x) ((!) x) (tm_to_dtr t (conf M x (Suc t0)))"
       using False step0 by simp
-    also have "… = final_acc (conf M x (Suc t0 + t))"
+    also have "\<dots> = final_acc (conf M x (Suc t0 + t))"
       by (rule Suc.IH)
-    also have "… = final_acc (conf M x (t0 + Suc t))"
+    also have "\<dots> = final_acc (conf M x (t0 + Suc t))"
       by simp
     finally show ?thesis .
   qed
@@ -123,7 +123,7 @@ qed
 
 lemma tm_to_dtr_seen_subset_shift:
   "seenL_run ((!) x) ((!) x) (tm_to_dtr t (conf M x t0))
-   ⊆ (λu. nat (head0 (conf M x (t0 + u)))) ` {..< t}"
+   \<subseteq> (\<lambda>u. nat (head0 (conf M x (t0 + u)))) ` {..< t}"
 proof (induction t arbitrary: t0)
   case 0
   show ?case by simp
@@ -132,7 +132,7 @@ next
   let ?i0 = "nat (head0 (conf M x t0))"
 
   have root_in:
-    "?i0 ∈ (λu. nat (head0 (conf M x (t0 + u)))) ` {..< Suc t}"
+    "?i0 \<in> (\<lambda>u. nat (head0 (conf M x (t0 + u)))) ` {..< Suc t}"
     by (intro image_eqI[where x=0]) (simp_all)
 
   have conf1:
@@ -151,23 +151,23 @@ next
 
   have IH:
     "seenL_run ((!) x) ((!) x) (tm_to_dtr t (conf M x (Suc t0)))
-     ⊆ (λu. nat (head0 (conf M x (Suc t0 + u)))) ` {..< t}"
+     \<subseteq> (\<lambda>u. nat (head0 (conf M x (Suc t0 + u)))) ` {..< t}"
     by (rule Suc.IH)
 
   have shift:
-    "(λu. nat (head0 (conf M x (Suc t0 + u)))) ` {..< t}
-    ⊆ (λv. nat (head0 (conf M x (t0 + v)))) ` {..< Suc t}"
+    "(\<lambda>u. nat (head0 (conf M x (Suc t0 + u)))) ` {..< t}
+    \<subseteq> (\<lambda>v. nat (head0 (conf M x (t0 + v)))) ` {..< Suc t}"
   proof
-    fix y assume "y ∈ (λu. nat (head0 (conf M x (Suc t0 + u)))) ` {..< t}"
+    fix y assume "y \<in> (\<lambda>u. nat (head0 (conf M x (Suc t0 + u)))) ` {..< t}"
     then obtain u where u_lt: "u < t"
       and y_def: "y = nat (head0 (conf M x (Suc t0 + u)))" by auto
-    let ?f = "λv. nat (head0 (conf M x (t0 + v)))"
+    let ?f = "\<lambda>v. nat (head0 (conf M x (t0 + v)))"
     have y_eq: "y = ?f (Suc u)"
       by (simp add: y_def)
-    have Su: "Suc u ∈ {..< Suc t}" using u_lt by simp
-    have "?f (Suc u) ∈ ?f ` {..< Suc t}"
+    have Su: "Suc u \<in> {..< Suc t}" using u_lt by simp
+    have "?f (Suc u) \<in> ?f ` {..< Suc t}"
       using Su by (rule imageI)
-    thus "y ∈ ?f ` {..< Suc t}"
+    thus "y \<in> ?f ` {..< Suc t}"
       by (simp add: y_eq)
   qed
 
@@ -176,20 +176,20 @@ next
        (if x ! ?i0
         then tm_to_dtr t (stepf (conf M x t0) True)
         else tm_to_dtr t (stepf (conf M x t0) False))
-     ⊆ (λv. nat (head0 (conf M x (t0 + v)))) ` {..< Suc t}"
+     \<subseteq> (\<lambda>v. nat (head0 (conf M x (t0 + v)))) ` {..< Suc t}"
     using sub_seen_eq IH shift by blast
 
   show ?case
   proof
     fix i assume i_in:
-      "i ∈ seenL_run ((!) x) ((!) x) (tm_to_dtr (Suc t) (conf M x t0))"
+      "i \<in> seenL_run ((!) x) ((!) x) (tm_to_dtr (Suc t) (conf M x t0))"
     then have "i = ?i0
-               ∨ i ∈ seenL_run ((!) x) ((!) x)
+               \<or> i \<in> seenL_run ((!) x) ((!) x)
                        (if x ! ?i0
                         then tm_to_dtr t (stepf (conf M x t0) True)
                         else tm_to_dtr t (stepf (conf M x t0) False))"
       by simp
-    thus "i ∈ (λu. nat (head0 (conf M x (t0 + u)))) ` {..< Suc t}"
+    thus "i \<in> (\<lambda>u. nat (head0 (conf M x (t0 + u)))) ` {..< Suc t}"
       using root_in subtree_in by blast
   qed
 qed
@@ -201,7 +201,7 @@ lemma tm_to_dtr_correct:
 (* one-line corollary; no fresh induction needed *)
 lemma tm_to_dtr_seen_subset_read0:
   "seenL_run ((!) x) ((!) x) (tm_to_dtr (steps M x) (conf M x 0))
-   ⊆ Base.read0 M x"
+   \<subseteq> Base.read0 M x"
   using tm_to_dtr_seen_subset_shift[of x "steps M x" 0]
   by (simp add: Base.read0_def)
 
@@ -211,8 +211,8 @@ end  (* context DTM_Run_Sem *)
 locale DTM_refines_DTR = DTM_Run_Sem +
   fixes n :: nat
   assumes head_in_range:
-    "⋀x t. length x = n ⟹ t < steps M x
-           ⟹ 0 ≤ head0 (conf M x t) ∧ nat (head0 (conf M x t)) < n"
+    "\<And>x t. length x = n \<Longrightarrow> t < steps M x
+           \<Longrightarrow> 0 \<le> head0 (conf M x t) \<and> nat (head0 (conf M x t)) < n"
 
 context DTM_refines_DTR
 begin
@@ -222,7 +222,7 @@ lemma dt_steps_on_x_eq_tm_steps:
   by simp
 
 lemma dt_correct_on_x:
-  "run (λi. x ! i) (λj. x ! j)
+  "run (\<lambda>i. x ! i) (\<lambda>j. x ! j)
        (tm_to_dtr (steps M x) (conf M x 0)) = accepts M x"
   by (rule tm_to_dtr_correct)
 
@@ -232,40 +232,40 @@ begin
 
 lemma steps_ge_two_sqrt_pow2:
   assumes n_def: "n = length as"
-      and k_le:  "kk ≤ n"
+      and k_le:  "kk \<le> n"
       and distinct: "distinct_subset_sums as"
-  shows "real (steps M (enc as s kk)) ≥ 2 * sqrt ((2::real) ^ n)"
+  shows "real (steps M (enc as s kk)) \<ge> 2 * sqrt ((2::real) ^ n)"
 proof -
   have LB:
-    "steps M (enc as s kk) ≥
+    "steps M (enc as s kk) \<ge>
        card (LHS (e_k as s kk) n) + card (RHS (e_k as s kk) n)"
     by (rule steps_lower_bound[OF n_def distinct])
   have AMG:
     "real (card (LHS (e_k as s kk) n) + card (RHS (e_k as s kk) n))
-       ≥ 2 * sqrt ((2::real) ^ n)"
+       \<ge> 2 * sqrt ((2::real) ^ n)"
     using lhs_rhs_sum_lower_bound[OF n_def k_le distinct] .
   from LB AMG show ?thesis by linarith
 qed
 
 theorem no_polytime_in_n_on_distinct_family:
-  shows "¬ (∃(c::real)>0. ∃(d::nat).
-           ∀as s. distinct_subset_sums as ⟶
-             steps M (enc as s kk) ≤ nat ⌈ c * real (length as) ^ d ⌉)"
+  shows "\<not> (\<exists>(c::real)>0. \<exists>(d::nat).
+           \<forall>as s. distinct_subset_sums as \<longrightarrow>
+             steps M (enc as s kk) \<le> nat \<lceil> c * real (length as) ^ d \<rceil>)"
 proof
-  assume ex_poly: "∃(c::real)>0. ∃(d::nat).
-          ∀as s. distinct_subset_sums as ⟶
-            steps M (enc as s kk) ≤ nat ⌈ c * real (length as) ^ d ⌉"
+  assume ex_poly: "\<exists>(c::real)>0. \<exists>(d::nat).
+          \<forall>as s. distinct_subset_sums as \<longrightarrow>
+            steps M (enc as s kk) \<le> nat \<lceil> c * real (length as) ^ d \<rceil>"
   then obtain c d where
     cpos: "c > 0" and
-    UB: "∀as s. distinct_subset_sums as ⟶
-                  steps M (enc as s kk) ≤ nat ⌈ c * real (length as) ^ d ⌉"
+    UB: "\<forall>as s. distinct_subset_sums as \<longrightarrow>
+                  steps M (enc as s kk) \<le> nat \<lceil> c * real (length as) ^ d \<rceil>"
     by blast
 
   from exp_beats_poly_ceiling_strict_plain[OF cpos]
   obtain N :: nat where
-    Nbig: "∀n≥N. of_int ⌈ c * real n ^ d ⌉ < 2 * sqrt ((2::real) ^ n)" by blast
+    Nbig: "\<forall>n\<ge>N. of_int \<lceil> c * real n ^ d \<rceil> < 2 * sqrt ((2::real) ^ n)" by blast
   define n where "n = max N kk"
-  have n_geN: "N ≤ n" and kk_le: "kk ≤ n" by (simp_all add: n_def)
+  have n_geN: "N \<le> n" and kk_le: "kk \<le> n" by (simp_all add: n_def)
 
 (* pick the powers-of-two instance *)
 
@@ -277,22 +277,22 @@ proof
 
   (* lower bound from your coverage + AM–GM pipeline *)
   have LB:
-  "2 * sqrt ((2::real) ^ n) ≤ real (steps M (enc (pow2_list n) s kk))"
+  "2 * sqrt ((2::real) ^ n) \<le> real (steps M (enc (pow2_list n) s kk))"
     using steps_ge_two_sqrt_pow2[of n "pow2_list n" s,
     OF _ kk_le distinct_subset_sums_pow2_list]
     by (simp add: len_as)
   have UBn:
-    "steps M (enc ?as s kk) ≤ nat ⌈ c * real (length ?as) ^ d ⌉"
+    "steps M (enc ?as s kk) \<le> nat \<lceil> c * real (length ?as) ^ d \<rceil>"
     using UB distinct by blast
   hence UBn_real:
-    "real (steps M (enc ?as s kk)) ≤ of_int ⌈ c * real n ^ d ⌉"
+    "real (steps M (enc ?as s kk)) \<le> of_int \<lceil> c * real n ^ d \<rceil>"
     by (smt (verit) LB Nbig ceiling_mono cpos distinct kk_le 
         landau_omega.R_mult_left_mono n_geN of_nat_le_0_iff 
         of_nat_le_iff of_nat_less_0_iff of_nat_less_of_int_iff 
         of_nat_nat power_less_imp_less_base real_sqrt_gt_zero 
         split_nat steps_ge_two_sqrt_pow2 zero_less_power)
   have LT:
-    "of_int ⌈ c * real n ^ d ⌉ < 2 * sqrt ((2::real) ^ n)"
+    "of_int \<lceil> c * real n ^ d \<rceil> < 2 * sqrt ((2::real) ^ n)"
     using Nbig n_geN by blast
 
   from LB UBn_real LT show False
@@ -301,8 +301,8 @@ qed
 
 (* Optional tidy corollaries *)
 corollary dtm_worst_case_sqrt_bound:
-  assumes "n = length as" "kk ≤ n" "distinct_subset_sums as"
-  shows   "steps M (enc as s kk) ≥ nat ⌈ 2 * sqrt ((2::real)^n) ⌉"
+  assumes "n = length as" "kk \<le> n" "distinct_subset_sums as"
+  shows   "steps M (enc as s kk) \<ge> nat \<lceil> 2 * sqrt ((2::real)^n) \<rceil>"
     using assms(1) assms(2) assms(3) steps_ge_two_sqrt_pow2 by auto
 
 end
