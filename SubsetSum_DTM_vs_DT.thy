@@ -1,6 +1,6 @@
 theory SubsetSum_DTM_vs_DT
   imports "SubsetSum_DTM_Bridge" "SubsetSum_DTM_Bridge2" 
-          "SubsetSum_DecisionTree"
+          "SubsetSum_DecisionTree" "SubsetSum_DTM_Bridge3"
 begin
 
 (* Define the TM\<rightarrow>decision-tree bridge INSIDE the base TM locale. *)
