@@ -234,12 +234,15 @@ lemma steps_ge_two_sqrt_pow2:
   assumes n_def: "n = length as"
       and k_le:  "kk \<le> n"
       and distinct: "distinct_subset_sums as"
+      and SOL: "\<exists>S \<subseteq> {..<length as}. sum_over as S = s"
   shows "real (steps M (enc as s kk)) \<ge> 2 * sqrt ((2::real) ^ n)"
 proof -
+  have kk_le_as: "kk \<le> length as" using k_le n_def by simp
+  
   have LB:
     "steps M (enc as s kk) \<ge>
        card (LHS (e_k as s kk) n) + card (RHS (e_k as s kk) n)"
-    by (rule steps_lower_bound[OF n_def distinct])
+    by (rule steps_lower_bound[OF n_def kk_le_as distinct SOL])
   have AMG:
     "real (card (LHS (e_k as s kk) n) + card (RHS (e_k as s kk) n))
        \<ge> 2 * sqrt ((2::real) ^ n)"
@@ -249,61 +252,70 @@ qed
 
 theorem no_polytime_in_n_on_distinct_family:
   shows "\<not> (\<exists>(c::real)>0. \<exists>(d::nat).
-           \<forall>as s. distinct_subset_sums as \<longrightarrow>
+           \<forall>as s. distinct_subset_sums as \<and> (\<exists>S \<subseteq> {..<length as}. sum_over as S = s) \<longrightarrow>
              steps M (enc as s kk) \<le> nat \<lceil> c * real (length as) ^ d \<rceil>)"
 proof
   assume ex_poly: "\<exists>(c::real)>0. \<exists>(d::nat).
-          \<forall>as s. distinct_subset_sums as \<longrightarrow>
+          \<forall>as s. distinct_subset_sums as \<and> (\<exists>S \<subseteq> {..<length as}. sum_over as S = s) \<longrightarrow>
             steps M (enc as s kk) \<le> nat \<lceil> c * real (length as) ^ d \<rceil>"
   then obtain c d where
     cpos: "c > 0" and
-    UB: "\<forall>as s. distinct_subset_sums as \<longrightarrow>
+    UB: "\<forall>as s. distinct_subset_sums as \<and> (\<exists>S \<subseteq> {..<length as}. sum_over as S = s) \<longrightarrow>
                   steps M (enc as s kk) \<le> nat \<lceil> c * real (length as) ^ d \<rceil>"
     by blast
-
   from exp_beats_poly_ceiling_strict_plain[OF cpos]
   obtain N :: nat where
     Nbig: "\<forall>n\<ge>N. of_int \<lceil> c * real n ^ d \<rceil> < 2 * sqrt ((2::real) ^ n)" by blast
   define n where "n = max N kk"
   have n_geN: "N \<le> n" and kk_le: "kk \<le> n" by (simp_all add: n_def)
-
-(* pick the powers-of-two instance *)
-
+  
+  (* pick the powers-of-two instance *)
   let ?as = "pow2_list n"
   have len_as: "length (pow2_list n) = n"
     by (simp add: pow2_list_def)
   have distinct: "distinct_subset_sums ?as"
     by (rule distinct_subset_sums_pow2_list)
-
+  
+  (* Pick s = 0, which is achievable by the empty subset *)
+  define s where "s = (0::int)"
+  have SOL: "\<exists>S \<subseteq> {..<length ?as}. sum_over ?as S = s"
+    unfolding s_def by (rule exI[of _ "{}"], simp add: sum_over_def)
+  
   (* lower bound from your coverage + AM–GM pipeline *)
   have LB:
-  "2 * sqrt ((2::real) ^ n) \<le> real (steps M (enc (pow2_list n) s kk))"
-    using steps_ge_two_sqrt_pow2[of n "pow2_list n" s,
-    OF _ kk_le distinct_subset_sums_pow2_list]
+    "2 * sqrt ((2::real) ^ n) \<le> real (steps M (enc (pow2_list n) s kk))"
+    using steps_ge_two_sqrt_pow2[of n "pow2_list n" s, OF _ kk_le distinct SOL]
     by (simp add: len_as)
+    
   have UBn:
     "steps M (enc ?as s kk) \<le> nat \<lceil> c * real (length ?as) ^ d \<rceil>"
-    using UB distinct by blast
+    using UB distinct SOL len_as by blast
+    
   hence UBn_real:
     "real (steps M (enc ?as s kk)) \<le> of_int \<lceil> c * real n ^ d \<rceil>"
-    by (smt (verit) LB Nbig ceiling_mono cpos distinct kk_le 
-        landau_omega.R_mult_left_mono n_geN of_nat_le_0_iff 
-        of_nat_le_iff of_nat_less_0_iff of_nat_less_of_int_iff 
-        of_nat_nat power_less_imp_less_base real_sqrt_gt_zero 
-        split_nat steps_ge_two_sqrt_pow2 zero_less_power)
+    using len_as
+    by (smt (verit, best) LB antisym_conv1 nat_ceiling_le_eq nless_le real_nat 
+        real_sqrt_ge_one two_realpow_ge_one verit_la_disequality)
+    
   have LT:
     "of_int \<lceil> c * real n ^ d \<rceil> < 2 * sqrt ((2::real) ^ n)"
     using Nbig n_geN by blast
-
   from LB UBn_real LT show False
     by linarith
 qed
 
 (* Optional tidy corollaries *)
 corollary dtm_worst_case_sqrt_bound:
-  assumes "n = length as" "kk \<le> n" "distinct_subset_sums as"
-  shows   "steps M (enc as s kk) \<ge> nat \<lceil> 2 * sqrt ((2::real)^n) \<rceil>"
-    using assms(1) assms(2) assms(3) steps_ge_two_sqrt_pow2 by auto
+  assumes n_def: "n = length as" 
+      and kk_le: "kk \<le> n" 
+      and distinct: "distinct_subset_sums as"
+      and SOL: "\<exists>S \<subseteq> {..<length as}. sum_over as S = s"
+  shows "steps M (enc as s kk) \<ge> nat \<lceil> 2 * sqrt ((2::real)^n) \<rceil>"
+proof -
+  have "real (steps M (enc as s kk)) \<ge> 2 * sqrt ((2::real) ^ n)"
+    using steps_ge_two_sqrt_pow2[OF n_def kk_le distinct SOL] .
+  thus ?thesis by linarith
+qed
 
 end
 end  (* theory *)
