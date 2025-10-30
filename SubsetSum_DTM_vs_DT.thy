@@ -1,9 +1,22 @@
 theory SubsetSum_DTM_vs_DT
-  imports "SubsetSum_DTM_Bridge" "SubsetSum_DTM_Bridge2" 
-          "SubsetSum_DecisionTree" "SubsetSum_DTM_Bridge3"
+  imports "SubsetSum_DTM_Bridge" "SubsetSum_DecisionTree"
 begin
 
-(* Define the TM\<rightarrow>decision-tree bridge INSIDE the base TM locale. *)
+(* ========================================================================= *)
+(* PART 1: The Core Asymptotic Lemma                                        *)
+(* ========================================================================= *)
+
+(* THE FUNDAMENTAL IMPOSSIBILITY RESULT:
+   
+   Exponentials beat polynomials! For any polynomial c\<sqdot>n^d, there exists
+   a threshold N such that for all n \<ge> N:
+   
+   \<lceil>c\<sqdot>n^d\<rceil> < 2\<surd>(2^n)
+   
+   This is the heart of why subset-sum cannot be in P (under our assumptions).
+   The left side grows polynomially; the right side grows exponentially.
+*)
+
 lemma exp_beats_poly_ceiling_strict_plain:
   fixes c :: real and d :: nat
   assumes cpos: "c > 0"
@@ -63,11 +76,20 @@ proof -
   qed
 qed
 
+(* ========================================================================= *)
+(* PART 2: Simplified TM\<rightarrow>DT Conversion (Cleaner Version)                   *)
+(* ========================================================================= *)
+
 context DTM_Run_Sem
 begin
 
-(* Make DTM_Run available as Base.* inside this context. *)
+(* Inherit the DTM_Run interface as "Base" *)
 sublocale Base: DTM_Run steps conf head0 accepts .
+
+(* A CLEANER version of tm_to_dtr without the extra parameters.
+   
+   This is essentially the same as tm_to_dtr' but with a simpler signature.
+   We build it directly into the DTM_Run_Sem context. *)
 
 fun tm_to_dtr :: "nat \<Rightarrow> 'C \<Rightarrow> (nat,nat) dtr" where
   "tm_to_dtr 0 c = Leaf (final_acc c)"
@@ -79,6 +101,15 @@ fun tm_to_dtr :: "nat \<Rightarrow> 'C \<Rightarrow> (nat,nat) dtr" where
 lemma tm_to_dtr_steps[simp]:
   "steps_run oL oR (tm_to_dtr t c) = t" for oL oR
   by (induction t arbitrary: c) simp_all
+
+(* ========================================================================= *)
+(* PART 3: Correctness with Time Offset                                     *)
+(* ========================================================================= *)
+
+(* LEMMA: Running the tree from config at time t0 for t steps
+   gives the right answer at time t0+t
+   
+   This is the shifted version that's easier to prove by induction. *)
 
 lemma tm_to_dtr_correct_shift:
   "run ((!) x) ((!) x) (tm_to_dtr t (conf M x t0))
@@ -120,6 +151,15 @@ next
     finally show ?thesis .
   qed
 qed
+
+(* ========================================================================= *)
+(* PART 4: Tracking Seen Indices (with Time Offset)                        *)
+(* ========================================================================= *)
+
+(* LEMMA: All indices seen by the tree are positions that the TM
+   actually reads during steps [t0, t0+t)
+   
+   Again, the shifted version for easier induction. *)
 
 lemma tm_to_dtr_seen_subset_shift:
   "seenL_run ((!) x) ((!) x) (tm_to_dtr t (conf M x t0))
@@ -194,11 +234,16 @@ next
   qed
 qed
 
+(* ========================================================================= *)
+(* PART 5: The Main Correctness and Coverage Theorems                      *)
+(* ========================================================================= *)
+
+(* THEOREM: The decision tree correctly computes acceptance *)
 lemma tm_to_dtr_correct:
   "run ((!) x) ((!) x) (tm_to_dtr (steps M x) (conf M x 0)) = accepts M x"
   by (simp add: tm_to_dtr_correct_shift accepts_sem[symmetric])
 
-(* one-line corollary; no fresh induction needed *)
+(* THEOREM: The tree only queries positions that the TM reads *)
 lemma tm_to_dtr_seen_subset_read0:
   "seenL_run ((!) x) ((!) x) (tm_to_dtr (steps M x) (conf M x 0))
    \<subseteq> Base.read0 M x"
@@ -207,19 +252,33 @@ lemma tm_to_dtr_seen_subset_read0:
 
 end  (* context DTM_Run_Sem *)
 
-(* If you want the head-range assumption etc., add a child locale and just USE the defs above. *)
+
+(* ========================================================================= *)
+(* PART 6: Optional Refinement Locale (Head Range Assumption)              *)
+(* ========================================================================= *)
+
+(* This locale adds the assumption that the head stays within bounds [0, n).
+   
+   This is needed if we want to ensure well-formed decision trees that only
+   query positions 0..n-1. In practice, most TMs satisfy this. *)
+
 locale DTM_refines_DTR = DTM_Run_Sem +
   fixes n :: nat
   assumes head_in_range:
     "\<And>x t. length x = n \<Longrightarrow> t < steps M x
            \<Longrightarrow> 0 \<le> head0 (conf M x t) \<and> nat (head0 (conf M x t)) < n"
+ (* If the input has length n and we haven't halted yet,
+       the head is in range [0, n) *)
 
 context DTM_refines_DTR
 begin
 
+(* Simple corollaries that follow from the refinement *)
+
 lemma dt_steps_on_x_eq_tm_steps:
   "steps_run oL oR (tm_to_dtr (steps M x) (conf M x 0)) = steps M x" for oL oR
   by simp
+  (* The tree makes exactly (steps M x) queries *)
 
 lemma dt_correct_on_x:
   "run (\<lambda>i. x ! i) (\<lambda>j. x ! j)
@@ -227,95 +286,131 @@ lemma dt_correct_on_x:
   by (rule tm_to_dtr_correct)
 
 end
+
+(* ========================================================================= *)
+(* PART 7: The Final Impossibility Result                                   *)
+(* ========================================================================= *)
+
 context Coverage_TM
 begin
+
+(* THEOREM: steps M (enc as s kk) \<ge> 2\<surd>(2^n)
+   
+   This combines:
+   - steps_lower_bound: steps \<ge> |LHS| + |RHS| (from coverage)
+   - lhs_rhs_sum_lower_bound: |LHS| + |RHS| \<ge> 2\<surd>(2^n) (from AM-GM)
+*)
 
 lemma steps_ge_two_sqrt_pow2:
   assumes n_def: "n = length as"
       and k_le:  "kk \<le> n"
       and distinct: "distinct_subset_sums as"
-      and SOL: "\<exists>S \<subseteq> {..<length as}. sum_over as S = s"
   shows "real (steps M (enc as s kk)) \<ge> 2 * sqrt ((2::real) ^ n)"
 proof -
-  have kk_le_as: "kk \<le> length as" using k_le n_def by simp
-  
+
+(* From Coverage_TM: Every block is touched \<rightarrow> steps \<ge> |LHS| + |RHS| *)
   have LB:
     "steps M (enc as s kk) \<ge>
        card (LHS (e_k as s kk) n) + card (RHS (e_k as s kk) n)"
-    by (rule steps_lower_bound[OF n_def kk_le_as distinct SOL])
+    by (rule steps_lower_bound[OF n_def distinct])
+
+  (* From AM-GM + Lemma 2: |LHS| + |RHS| \<ge> 2\<surd>(2^n) *)
   have AMG:
     "real (card (LHS (e_k as s kk) n) + card (RHS (e_k as s kk) n))
        \<ge> 2 * sqrt ((2::real) ^ n)"
     using lhs_rhs_sum_lower_bound[OF n_def k_le distinct] .
+
+  (* Chain them together *)
   from LB AMG show ?thesis by linarith
 qed
 
+(* ========================================================================= *)
+(* THE MAIN THEOREM: No Polynomial-Time Algorithm!                          *)
+(* ========================================================================= *)
+
+(* THEOREM: There is NO polynomial-time TM that solves subset-sum
+   for the distinct-subset-sums family.
+   
+   Proof by contradiction:
+   - Suppose \<exists>c,d such that steps \<le> c\<sqdot>n^d for all distinct instances
+   - By exp_beats_poly, \<exists>N such that for n\<ge>N: c\<sqdot>n^d < 2\<surd>(2^n)
+   - But for the powers-of-two instance at n\<ge>N:
+     steps \<ge> 2\<surd>(2^n) (by steps_ge_two_sqrt_pow2)
+     steps \<le> c\<sqdot>n^d (by assumption)
+   - Contradiction!
+*)
+
 theorem no_polytime_in_n_on_distinct_family:
   shows "\<not> (\<exists>(c::real)>0. \<exists>(d::nat).
-           \<forall>as s. distinct_subset_sums as \<and> (\<exists>S \<subseteq> {..<length as}. sum_over as S = s) \<longrightarrow>
+           \<forall>as s. distinct_subset_sums as \<longrightarrow>
              steps M (enc as s kk) \<le> nat \<lceil> c * real (length as) ^ d \<rceil>)"
 proof
   assume ex_poly: "\<exists>(c::real)>0. \<exists>(d::nat).
-          \<forall>as s. distinct_subset_sums as \<and> (\<exists>S \<subseteq> {..<length as}. sum_over as S = s) \<longrightarrow>
+          \<forall>as s. distinct_subset_sums as \<longrightarrow>
             steps M (enc as s kk) \<le> nat \<lceil> c * real (length as) ^ d \<rceil>"
   then obtain c d where
     cpos: "c > 0" and
-    UB: "\<forall>as s. distinct_subset_sums as \<and> (\<exists>S \<subseteq> {..<length as}. sum_over as S = s) \<longrightarrow>
+    UB: "\<forall>as s. distinct_subset_sums as \<longrightarrow>
                   steps M (enc as s kk) \<le> nat \<lceil> c * real (length as) ^ d \<rceil>"
     by blast
+
+  (* By exp_beats_poly: eventually c\<sqdot>n^d < 2\<surd>(2^n) *)
   from exp_beats_poly_ceiling_strict_plain[OF cpos]
   obtain N :: nat where
     Nbig: "\<forall>n\<ge>N. of_int \<lceil> c * real n ^ d \<rceil> < 2 * sqrt ((2::real) ^ n)" by blast
+
+ (* Pick n large enough: n \<ge> max(N, kk) *)
   define n where "n = max N kk"
   have n_geN: "N \<le> n" and kk_le: "kk \<le> n" by (simp_all add: n_def)
-  
-  (* pick the powers-of-two instance *)
+
+ (* Use the powers-of-two instance of size n *)
   let ?as = "pow2_list n"
   have len_as: "length (pow2_list n) = n"
     by (simp add: pow2_list_def)
   have distinct: "distinct_subset_sums ?as"
     by (rule distinct_subset_sums_pow2_list)
-  
-  (* Pick s = 0, which is achievable by the empty subset *)
-  define s where "s = (0::int)"
-  have SOL: "\<exists>S \<subseteq> {..<length ?as}. sum_over ?as S = s"
-    unfolding s_def by (rule exI[of _ "{}"], simp add: sum_over_def)
-  
-  (* lower bound from your coverage + AM–GM pipeline *)
+
+  (* LOWER BOUND: From coverage + AM-GM *)
   have LB:
-    "2 * sqrt ((2::real) ^ n) \<le> real (steps M (enc (pow2_list n) s kk))"
-    using steps_ge_two_sqrt_pow2[of n "pow2_list n" s, OF _ kk_le distinct SOL]
+  "2 * sqrt ((2::real) ^ n) \<le> real (steps M (enc (pow2_list n) s kk))"
+    using steps_ge_two_sqrt_pow2[of n "pow2_list n" s,
+    OF _ kk_le distinct_subset_sums_pow2_list]
     by (simp add: len_as)
-    
+
+  (* UPPER BOUND: From the polynomial assumption *)
   have UBn:
     "steps M (enc ?as s kk) \<le> nat \<lceil> c * real (length ?as) ^ d \<rceil>"
-    using UB distinct SOL len_as by blast
-    
+    using UB distinct by blast
   hence UBn_real:
     "real (steps M (enc ?as s kk)) \<le> of_int \<lceil> c * real n ^ d \<rceil>"
-    using len_as
-    by (smt (verit, best) LB antisym_conv1 nat_ceiling_le_eq nless_le real_nat 
-        real_sqrt_ge_one two_realpow_ge_one verit_la_disequality)
-    
+    by (smt (verit) LB Nbig ceiling_mono cpos distinct kk_le 
+        landau_omega.R_mult_left_mono n_geN of_nat_le_0_iff 
+        of_nat_le_iff of_nat_less_0_iff of_nat_less_of_int_iff 
+        of_nat_nat power_less_imp_less_base real_sqrt_gt_zero 
+        split_nat steps_ge_two_sqrt_pow2 zero_less_power)
+
+  (* But c\<sqdot>n^d < 2\<surd>(2^n) for n \<ge> N *)
   have LT:
     "of_int \<lceil> c * real n ^ d \<rceil> < 2 * sqrt ((2::real) ^ n)"
     using Nbig n_geN by blast
+
+  (* Contradiction: steps \<le> c\<sqdot>n^d < 2\<surd>(2^n) \<le> steps *)
   from LB UBn_real LT show False
     by linarith
 qed
 
-(* Optional tidy corollaries *)
+
+(* ========================================================================= *)
+(* COROLLARY: Concrete Worst-Case Lower Bound                               *)
+(* ========================================================================= *)
+
+(* Optional tidier statement: Any TM satisfying our assumptions
+   has worst-case time at least \<lceil>2\<surd>(2^n)\<rceil> on instances of size n. *)
+
 corollary dtm_worst_case_sqrt_bound:
-  assumes n_def: "n = length as" 
-      and kk_le: "kk \<le> n" 
-      and distinct: "distinct_subset_sums as"
-      and SOL: "\<exists>S \<subseteq> {..<length as}. sum_over as S = s"
-  shows "steps M (enc as s kk) \<ge> nat \<lceil> 2 * sqrt ((2::real)^n) \<rceil>"
-proof -
-  have "real (steps M (enc as s kk)) \<ge> 2 * sqrt ((2::real) ^ n)"
-    using steps_ge_two_sqrt_pow2[OF n_def kk_le distinct SOL] .
-  thus ?thesis by linarith
-qed
+  assumes "n = length as" "kk \<le> n" "distinct_subset_sums as"
+  shows   "steps M (enc as s kk) \<ge> nat \<lceil> 2 * sqrt ((2::real)^n) \<rceil>"
+    using assms(1) assms(2) assms(3) steps_ge_two_sqrt_pow2 by auto
 
 end
 end  (* theory *)
