@@ -312,9 +312,9 @@ proof -
   have dist_as: "distinct_subset_sums as" 
     by (simp add: as_def distinct_subset_sums_pow2_list)
   
-  (* Apply steps_lower_bound directly - no other conditions needed! *)
+  (* Apply steps_lower_bound - NOW with as_def and s_def *)
   have "steps M (enc as s kk) ≥ card (LHS (e_k as s kk) n) + card (RHS (e_k as s kk) n)"
-    using steps_lower_bound[OF len_as[symmetric] dist_as n_ge2 kk_bounds] .
+    using steps_lower_bound[OF len_as[symmetric] dist_as n_ge2 kk_bounds as_def s_def] .
   
   thus ?thesis using len_as dist_as by blast
 qed
