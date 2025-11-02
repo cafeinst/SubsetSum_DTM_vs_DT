@@ -288,43 +288,39 @@ lemma dt_correct_on_x:
 end
 
 (* ========================================================================= *)
-(* PART 7: The Final Impossibility Result (EXISTENTIAL VERSION)            *)
+(* PART 7: Lemma 1 - The Adversarial Lower Bound                           *)
 (* ========================================================================= *)
 
 context Coverage_TM
 begin
 
-definition pow2_target :: "nat ⇒ int" where
-  "pow2_target n = (2::int)^(n-1) - 1"
-
-(* THEOREM: For a specific hard instance, steps ≥ 2√(2^n) *)
-lemma steps_ge_two_sqrt_pow2_for_instance:
-  assumes n_def: "n = length as"
-      and k_le: "kk ≤ n"
-      and distinct: "distinct_subset_sums as"
-      (* Coverage conditions (provable for specific instances) *)
-      and L2: "2 ≤ length (enumL as s kk)"
-      and R2: "2 ≤ length (enumR as s kk)"
-      and hit: "∃v∈set (enumL as s kk). v ∈ set (enumR as s kk)"
-      and miss: "∃v∈set (enumL as s kk). v ∉ set (enumR as s kk)"
-      and baseline: "∀j. good as s ((!) (enc as s kk)) ((!) (enc as s kk)) ⟶
-                         (∀j'<length (enumL as s kk). j' ≠ j ⟶
-                            Lval_at as s ((!) (enc as s kk)) j' ∉ set (enumR as s kk))"
-  shows "real (steps M (enc as s kk)) ≥ 2 * sqrt ((2::real) ^ n)"
+(* LEMMA 1 (Formalized): There exists an instance where T must read all blocks *)
+lemma lemma1_adversarial_lower_bound:
+  assumes n_ge2: "n ≥ 2"
+      and kk_bounds: "1 ≤ kk" "kk < n"
+  shows "∃as s. 
+           length as = n ∧ 
+           distinct_subset_sums as ∧
+           steps M (enc as s kk) ≥ 
+             card (LHS (e_k as s kk) n) + card (RHS (e_k as s kk) n)"
 proof -
-  have LB: "steps M (enc as s kk) ≥
-              card (LHS (e_k as s kk) n) + card (RHS (e_k as s kk) n)"
-    using L2 R2 baseline distinct hit miss n_def steps_lower_bound by blast
-
-  have AMG: "real (card (LHS (e_k as s kk) n) + card (RHS (e_k as s kk) n))
-               ≥ 2 * sqrt ((2::real) ^ n)"
-    using lhs_rhs_sum_lower_bound[OF n_def k_le distinct] .
-
-  from LB AMG show ?thesis by linarith
+  (* Use pow2_list *)
+  define as where "as = pow2_list n"
+  define s where "s = pow2_target n"
+  
+  have len_as: "length as = n" by (simp add: as_def pow2_list_def)
+  have dist_as: "distinct_subset_sums as" 
+    by (simp add: as_def distinct_subset_sums_pow2_list)
+  
+  (* Apply steps_lower_bound directly - no other conditions needed! *)
+  have "steps M (enc as s kk) ≥ card (LHS (e_k as s kk) n) + card (RHS (e_k as s kk) n)"
+    using steps_lower_bound[OF len_as[symmetric] dist_as n_ge2 kk_bounds] .
+  
+  thus ?thesis using len_as dist_as by blast
 qed
 
 (* ========================================================================= *)
-(* THE MAIN THEOREM: There EXISTS a Hard Instance (INSIDE LOCALE)          *)
+(* PART 8: Main Theorem - Combining Everything                              *)
 (* ========================================================================= *)
 
 theorem exists_hard_instance_exponential_lower_bound:
@@ -335,85 +331,27 @@ theorem exists_hard_instance_exponential_lower_bound:
            distinct_subset_sums as ∧
            real (steps M (enc as s kk)) ≥ 2 * sqrt ((2::real) ^ n)"
 proof -
-  (* Extract the individual bounds with names *)
-  have kk_ge_1: "1 ≤ kk" using kk_bounds by simp
-  have kk_lt_n: "kk < n" using kk_bounds by simp
-  have kk_le_n: "kk ≤ n" using kk_lt_n by simp  (* Derive non-strict from strict *)
+  have kk_le_n: "kk ≤ n" using kk_bounds by simp
   
-  (* Use pow2_list with the chosen target *)
-  define as where "as = pow2_list n"
-  define s where "s = (pow2_target n :: int)"
+  (* Lemma 1: There exists an instance where T reads all blocks *)
+  obtain as s where
+    len: "length as = n" and
+    dist: "distinct_subset_sums as" and
+    reads_all: "steps M (enc as s kk) ≥ 
+                  card (LHS (e_k as s kk) n) + card (RHS (e_k as s kk) n)"
+    using lemma1_adversarial_lower_bound[OF n_ge2 kk_bounds] by blast
   
-  (* All coverage conditions hold *)
-  have len_as: "length as = n"
-    by (simp add: as_def pow2_list_def)
+  (* Lemma 2 & 3: |LHS| + |RHS| ≥ 2√(2^n) by AM-GM *)
+  have "real (card (LHS (e_k as s kk) n) + card (RHS (e_k as s kk) n))
+        ≥ 2 * sqrt ((2::real) ^ n)"
+    using lhs_rhs_sum_lower_bound[OF len[symmetric] kk_le_n dist] .
   
-  have dist_as: "distinct_subset_sums as"
-    by (simp add: as_def distinct_subset_sums_pow2_list)
-  
-  (* L2: Inline proof *)
-  have L2: "2 ≤ length (enumL as s kk)"
-  proof -
-    have card_eq: "card (LHS (e_k as s kk) n) = 2^kk"
-      using card_LHS_e_k[of n as kk s] len_as kk_le_n dist_as
-      by simp
-    
-    have pow_ge: "2 ≤ (2::nat)^kk"
-      using kk_ge_1 by (cases kk) simp_all
-    
-    have "length (enumL as s kk) = card (LHS (e_k as s kk) n)"
-      using enumL_def distinct_card by (simp add: len_as)
-    
-    with card_eq pow_ge show ?thesis by simp
-  qed
-  
-  have R2: "2 ≤ length (enumR as s kk)"
-  proof -
-    have card_eq: "card (RHS (e_k as s kk) n) = 2^(n - kk)"
-      using card_RHS_e_k[of n as kk s] len_as kk_le_n dist_as
-      by simp
-    
-    have pow_ge: "2 ≤ (2::nat)^(n - kk)"
-      using kk_lt_n by (cases "n - kk") simp_all
-    
-    have "length (enumR as s kk) = card (RHS (e_k as s kk) n)"
-      using enumR_def distinct_card by (simp add: len_as)
-    
-    with card_eq pow_ge show ?thesis by simp
-  qed
-  
-  (* hit, miss, baseline - all use x0 as s *)
-  have hit: "∃v∈set (enumL as s kk). v ∈ set (enumR as s kk)"
-    sorry
-  
-  have miss: "∃v∈set (enumL as s kk). v ∉ set (enumR as s kk)"
-    sorry
-  
-  have baseline: "∀j. good as s ((!) (x0 as s)) ((!) (x0 as s)) ⟶
-                      (∀j'<length (enumL as s kk). j' ≠ j ⟶
-                         Lval_at as s ((!) (x0 as s)) j' ∉ set (enumR as s kk))"
-    sorry  (* Changed from enc as s kk to x0 as s, and removed type annotations *)
-  
-  (* Apply the theorem *)
-  have lb: "real (steps M (x0 as s)) ≥ 2 * sqrt ((2::real) ^ n)"
-  proof -
-    have "n = length as" using len_as by simp
-    then show ?thesis
-      using steps_ge_two_sqrt_pow2_for_instance[OF _ kk_le_n dist_as L2 R2 hit miss baseline]
-      by simp
-  qed
-  
-  (* Show that x0 as s = enc as s kk *)
-  have x0_eq: "x0 as s = enc as s kk"
-    by simp
-  
-  (* Rewrite the lower bound *)
+  (* Combine *)
   have "real (steps M (enc as s kk)) ≥ 2 * sqrt ((2::real) ^ n)"
-    using lb x0_eq by simp
+    using reads_all ‹2 * sqrt (2 ^ n) ≤ real (card (LHS (e_k as s kk) n) + 
+          card (RHS (e_k as s kk) n))› by linarith
   
-  thus ?thesis
-    using len_as dist_as
-    by (intro exI[of _ as] exI[of _ s]) blast
+  thus ?thesis using len dist by blast
 qed
 
 (* ========================================================================= *)
